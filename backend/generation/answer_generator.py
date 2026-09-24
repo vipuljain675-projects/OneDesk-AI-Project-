@@ -36,14 +36,15 @@ def detect_action_intent(prompt: str) -> dict:
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0,      # deterministic for intent detection
-            max_tokens=512,
+            max_tokens=1024,
             response_format={"type": "json_object"}
         )
         raw = response.choices[0].message.content.strip()
         try:
             return json.loads(raw)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as je:
+            print(f"⚠️ [detect_action_intent] JSONDecodeError: {je} | Raw: {raw[:150]}")
             return {"intent_type": "query", "details": {}}
-    except Exception:
-        # Groq may return BadRequestError for empty/invalid JSON — treat as plain query
+    except Exception as e:
+        print(f"⚠️ [detect_action_intent] Groq API Exception: {e}")
         return {"intent_type": "query", "details": {}}

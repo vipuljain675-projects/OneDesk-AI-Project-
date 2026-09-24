@@ -1,7 +1,6 @@
-// src/app/page.tsx
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Header } from "@/components/Header";
 import { EmployeeLayout } from "@/components/EmployeeLayout";
 import { AdminHelpdeskView } from "@/components/AdminHelpdeskView";
@@ -14,9 +13,10 @@ export default function Home() {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [activeAdminView, setActiveAdminView] = useState<"admin_queue" | "admin_analytics" | "admin_users">("admin_queue");
   const [ticketCount, setTicketCount] = useState<number>(0);
+  const upsertedEmailRef = useRef<string | null>(null);
 
   // Helper: map Supabase user → UserSession and persist
-  const applySupabaseUser = async (user: any) => {
+  const applySupabaseUser = (user: any) => {
     const fullName =
       user.user_metadata?.full_name ||
       user.user_metadata?.name ||
@@ -31,12 +31,21 @@ export default function Home() {
         .slice(0, 2)
         .toUpperCase() || "ME";
 
+    const provider =
+      user.app_metadata?.provider ||
+      (user.email?.toLowerCase().includes("@gmail.com")
+        ? "google"
+        : user.email?.toLowerCase().includes("@outlook.") || user.email?.toLowerCase().includes("@microsoft.")
+        ? "azure"
+        : "email");
+
     const mappedSession: UserSession = {
       name: fullName,
       email: user.email || "",
       role: "employee",
       department: user.user_metadata?.department || "Product Engineering",
       avatar: avatarInitials,
+      authProvider: provider,
     };
 
     setUserSession(mappedSession);
@@ -44,35 +53,18 @@ export default function Home() {
       localStorage.setItem("onedesk_session", JSON.stringify(mappedSession));
     } catch {}
 
-    // Upsert into Supabase onedesk_users table via backend API
-    // Retry once after 3s if backend is still warming up
-    const tryUpsert = async () => {
-      try {
-        await upsertOneDeskUser({
-          email: user.email || "",
-          name: fullName,
-          department: user.user_metadata?.department || "Product Engineering",
-          role: "employee",
-          auth_provider: user.app_metadata?.provider || "email",
-          auth_user_id: user.id || "",
-        });
-      } catch {
-        // Backend may still be loading — retry once after 3s silently
-        setTimeout(async () => {
-          try {
-            await upsertOneDeskUser({
-              email: user.email || "",
-              name: fullName,
-              department: user.user_metadata?.department || "Product Engineering",
-              role: "employee",
-              auth_provider: user.app_metadata?.provider || "email",
-              auth_user_id: user.id || "",
-            });
-          } catch { /* silent — backend not available */ }
-        }, 3000);
-      }
-    };
-    tryUpsert();
+    // Upsert into Supabase onedesk_users table via backend API (non-blocking)
+    if (user.email && upsertedEmailRef.current !== user.email) {
+      upsertedEmailRef.current = user.email;
+      upsertOneDeskUser({
+        email: user.email || "",
+        name: fullName,
+        department: user.user_metadata?.department || "Product Engineering",
+        role: "employee",
+        auth_provider: user.app_metadata?.provider || "email",
+        auth_user_id: user.id || "",
+      }).catch(() => {});
+    }
   };
 
   // Initialize session from localStorage and Supabase Auth

@@ -45,13 +45,16 @@ AVAILABLE_TOOLS = [
     {
         "name": "apply_leave",
         "display_name": "Apply for Leave",
-        "description": "Submit a leave request on behalf of the employee",
+        "description": "Submit a leave request and auto-draft formal email application for the manager",
         "domain": "HR",
         "parameters": {
             "leave_type": {"type": "enum", "options": ["casual", "sick", "earned"], "label": "Leave Type"},
             "start_date": {"type": "string", "label": "Start Date"},
             "end_date": {"type": "string", "label": "End Date"},
-            "reason": {"type": "string", "label": "Reason (optional)"}
+            "reason": {"type": "string", "label": "Reason"},
+            "manager_email": {"type": "string", "label": "Manager Email (Recipient)"},
+            "email_subject": {"type": "string", "label": "Email Subject"},
+            "formal_body": {"type": "string", "label": "Formal Application Draft"}
         }
     },
     {

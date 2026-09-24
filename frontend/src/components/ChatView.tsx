@@ -662,6 +662,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
                   {msg.actionProposal && (
                     <ActionCard
                       proposal={msg.actionProposal}
+                      userName="Vipul Jain"
+                      userEmail="healthmate05@gmail.com"
                       onActionConfirmed={() => {
                         if (onTicketCreated) onTicketCreated();
                       }}

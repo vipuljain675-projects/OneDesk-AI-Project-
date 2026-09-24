@@ -498,6 +498,9 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
                       <ActionCard
                         proposal={msg.actionProposal}
                         employeeId={userSession?.email || "EMP001"}
+                        userName={userSession?.name || "Vipul Jain"}
+                        userEmail={userSession?.email || "healthmate05@gmail.com"}
+                        authProvider={userSession?.authProvider}
                         threadId={activeThreadId || undefined}
                         messageId={msg.id}
                         onActionConfirmed={(result) => {

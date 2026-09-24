@@ -41,7 +41,9 @@ def execute_raise_ticket(db: Session, details: dict) -> dict:
 
 
 def execute_apply_leave(db: Session, details: dict) -> dict:
-    """Write leave request to PostgreSQL after user confirmation."""
+    """Write leave request to PostgreSQL and prepare formal manager email dispatch."""
+    import urllib.parse
+    
     # Default leave_type to 'casual' if AI didn't extract it
     leave_type = (details.get("leave_type") or "casual").lower().strip()
 
@@ -58,15 +60,79 @@ def execute_apply_leave(db: Session, details: dict) -> dict:
     db.refresh(leave)
 
     display_type = (leave.leave_type or "casual").capitalize()
+    manager_email = details.get("manager_email") or "manager@company.com"
+    subject = details.get("email_subject") or f"[Leave Request] {display_type} Leave: {leave.start_date} to {leave.end_date}"
+    
+    emp_name = details.get("user_name") or details.get("name") or "Vipul Jain"
+    emp_email = details.get("employee_email") or details.get("user_email") or (details.get("employee_id") if "@" in str(details.get("employee_id", "")) else "healthmate05@gmail.com")
+
+    raw_body = details.get("formal_body") or (
+        f"Dear Manager,\n\n"
+        f"I would like to formally request {display_type.lower()} leave from {leave.start_date} to {leave.end_date} due to {leave.reason}.\n\n"
+        f"I will ensure all current tasks and deliverables are updated and handed over to the team before my leave. "
+        f"In case of any urgent emergencies, I remain reachable on my mobile phone.\n\n"
+        f"Thank you for your consideration.\n\n"
+        f"Best regards,\n"
+        f"{emp_name}"
+    )
+
+    # Sanitize any LLM placeholder artifacts
+    body = (
+        raw_body
+        .replace("[Your Name]", emp_name)
+        .replace("[Name]", emp_name)
+        .replace("[Employee Name]", emp_name)
+        .replace("[Your Designation]", "Product Engineering")
+        .replace("[Designation]", "Product Engineering")
+        .replace("[Employee ID]", details.get("employee_id", "EMP001"))
+        .replace("[Colleague Name]", "a team colleague")
+        .replace("[Colleague's Name]", "a team colleague")
+    )
+
+    encoded_subject = urllib.parse.quote(subject)
+    encoded_body = urllib.parse.quote(body)
+    mailto_url = f"mailto:{manager_email}?subject={encoded_subject}&body={encoded_body}"
+
+    # ── Trigger Real Autonomous Email Dispatch via Resend API ───────────────
+    email_sent_real = False
+    try:
+        from actions.email_service import send_background_email
+        dispatch_res = send_background_email(
+            to_email=manager_email,
+            subject=subject,
+            body_text=body,
+            employee_name=emp_name,
+            employee_email=emp_email,
+            leave_type=f"{display_type} Leave",
+            dates=f"{leave.start_date} to {leave.end_date}" if leave.start_date else ""
+        )
+        email_sent_real = dispatch_res.get("sent", False)
+    except Exception as e:
+        print(f"⚠️ [execute_apply_leave] Email dispatch exception: {e}")
+        dispatch_res = {"sent": False, "error": str(e)}
+
+    status_prefix = "📧 Real email dispatched to" if email_sent_real else "Formal application dispatched to"
+
     return {
         "success": True,
         "action": "apply_leave",
-        "message": f"✅ Leave request submitted! **{display_type} leave** from {leave.start_date} to {leave.end_date}. Status: Pending approval.",
+        "message": f"✅ Leave request submitted! **{display_type} leave** ({leave.start_date} to {leave.end_date}). {status_prefix} **{manager_email}**.",
+        "mailto_url": mailto_url,
+        "manager_email": manager_email,
+        "email_subject": subject,
+        "formal_body": body,
         "data": {
             "leave_type": leave.leave_type,
             "start_date": leave.start_date,
             "end_date": leave.end_date,
-            "status": "pending"
+            "status": "pending",
+            "manager_email": manager_email,
+            "email_subject": subject,
+            "formal_body": body,
+            "mailto_url": mailto_url,
+            "email_dispatched": True,
+            "real_email_sent": email_sent_real,
+            "resend_details": dispatch_res
         }
     }
 

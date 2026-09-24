@@ -34,6 +34,7 @@ export interface UserSession {
   department: string;
   adminDomain?: "IT" | "HR" | "Finance" | "Facilities" | "ALL";
   avatar: string;
+  authProvider?: string;
 }
 
 interface AdminDeptConfig {

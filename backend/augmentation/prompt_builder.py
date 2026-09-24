@@ -97,14 +97,22 @@ def build_action_detection_prompt(query: str, domain: str, history: list[dict] =
 
     prompt = f"""You are an intent classifier for an enterprise assistant ({domain} domain).
 
-Determine if the employee is asking for information/troubleshooting OR explicitly requesting an automated action.
+Determine if the employee is asking general information/questions OR requesting an automated action/workflow.
 {recent_context}
 RULES:
-1. "query": Use when the employee is asking questions, troubleshooting, seeking policy details, or discussing plans without asking to execute/book (e.g., "How many leaves do I get?", "If I go on holiday will salary be deducted?", "My screen is flickering", "What is the meal expense limit?").
-2. "raise_ticket": ONLY when employee explicitly asks to raise, submit, file, or create an IT ticket/incident (e.g. "Raise an IT ticket for this", "File a complaint about my laptop", "Please create a ticket").
-3. "apply_leave": When employee asks to apply, submit, take, or log a leave (e.g. "Apply sick leave for tomorrow", "Submit leave from Oct 1 to Oct 3", "Apply for 3 days leave", "Please log my vacation for next week"). Always include "leave_type" — default to "casual" if not specified by the user.
+1. "query": ONLY when employee is asking questions, troubleshooting, seeking policy details, or informational inquiry without asking to take time off, file, or book (e.g. "How many leaves do I get?", "What is the bereavement policy?", "My screen is flickering", "What is the meal expense limit?").
+2. "raise_ticket": When employee asks to raise, submit, file, or create an IT ticket/incident (e.g. "Raise an IT ticket for this", "File a complaint about my laptop", "Please create a ticket").
+3. "apply_leave": When employee wants to take time off, apply for leave, or draft/send a leave application (e.g. "I need 2 days casual leave", "Apply sick leave for tomorrow", "Submit leave from Oct 1 to Oct 3", "Write a leave application and mail to manager@company.com").
+   Always extract:
+   - "leave_type": "casual" | "sick" | "earned" | "vacation" (default to "casual")
+   - "start_date": requested start date or relative date
+   - "end_date": requested end date or relative date
+   - "reason": reason for leave
+   - "manager_email": exact email address if mentioned in query, else "manager@company.com"
+   - "email_subject": formal corporate email subject
+   - "formal_body": professional formal email body for the manager with greeting, dates, reason, handover note, and formal sign-off. NEVER output brackets or placeholders like "[Your Name]" or "[Name]". Sign off as "Vipul Jain".
 4. "book_room": When employee asks to book, reserve, or schedule a room/desk (e.g. "Book conference room B for 3 PM", "Reserve room 101 for tomorrow").
-5. "submit_expense": When employee asks to file, submit, claim, or log an expense reimbursement (e.g. "I spent ₹4,200 on client dinner yesterday, file a reimbursement", "Reimburse $120 for flight travel", "Submit expense claim of 1500 for team lunch"). Auto-extract amount, category (Meals & Entertainment / Travel & Transport / Software & Tools / Office & Supplies), expense_date, and description.
+5. "submit_expense": When employee asks to file, submit, claim, or log an expense reimbursement (e.g. "I spent ₹4,200 on client dinner yesterday, file a reimbursement", "Reimburse $120 for flight travel"). Auto-extract amount, category (Meals & Entertainment / Travel & Transport / Software & Tools / Office & Supplies), expense_date, and description.
 6. "request_visitor_pass": When employee asks to issue, generate, request, or create a campus visitor pass or guest badge (e.g. "My client Rahul Sharma is visiting campus tomorrow at 2 PM, generate a visitor badge", "Issue guest pass for Priya Patel"). Auto-extract visitor_name, visitor_email, visit_date, time_slot, purpose.
 7. "submit_referral": When employee asks to refer a candidate for a job or role (e.g. "Refer Priya Verma for Full Stack Developer role", "Submit candidate referral for Aman Gupta"). Auto-extract candidate_name, candidate_email, role, notes.
 
@@ -113,7 +121,7 @@ Respond in valid JSON only:
   "intent_type": "query" | "raise_ticket" | "apply_leave" | "book_room" | "submit_expense" | "request_visitor_pass" | "submit_referral",
   "details": {{
     // For raise_ticket: "issue_description", "priority" (low/medium/high)
-    // For apply_leave: "leave_type" (casual/sick/earned/vacation), "start_date", "end_date", "reason"
+    // For apply_leave: "leave_type", "start_date", "end_date", "reason", "manager_email", "email_subject", "formal_body"
     // For book_room: "room_preference", "booking_date", "time_slot", "purpose"
     // For submit_expense: "amount", "category", "expense_date", "description"
     // For request_visitor_pass: "visitor_name", "visitor_email", "visit_date", "time_slot", "purpose"

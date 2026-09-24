@@ -32,25 +32,31 @@ def upsert_user(req: UpsertUserRequest, db: Session = Depends(get_db)):
     Called automatically on every login.
     Creates a new user row if email not seen before,
     or updates name/department if already exists.
-    After this, the user appears in the 'onedesk_users' table in Supabase.
+    Handles concurrent race conditions safely with rollback.
     """
+    from sqlalchemy.exc import IntegrityError
+
     existing = db.query(OneDeskUser).filter(OneDeskUser.email == req.email).first()
 
     if existing:
-        # Update name / department in case they changed
-        existing.name = req.name or existing.name
-        existing.department = req.department or existing.department
-        existing.auth_provider = req.auth_provider
-        db.commit()
-        db.refresh(existing)
+        try:
+            existing.name = req.name or existing.name
+            existing.department = req.department or existing.department
+            existing.auth_provider = req.auth_provider
+            db.commit()
+            db.refresh(existing)
+        except Exception:
+            db.rollback()
+            existing = db.query(OneDeskUser).filter(OneDeskUser.email == req.email).first()
+
         return {
             "status": "updated",
             "user": {
-                "id": existing.id,
-                "name": existing.name,
-                "email": existing.email,
-                "department": existing.department,
-                "role": existing.role,
+                "id": existing.id if existing else "",
+                "name": existing.name if existing else req.name,
+                "email": existing.email if existing else req.email,
+                "department": existing.department if existing else req.department,
+                "role": existing.role if existing else req.role,
             }
         }
     else:
@@ -64,19 +70,36 @@ def upsert_user(req: UpsertUserRequest, db: Session = Depends(get_db)):
             role=req.role,
             auth_provider=req.auth_provider,
         )
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        return {
-            "status": "created",
-            "user": {
-                "id": new_user.id,
-                "name": new_user.name,
-                "email": new_user.email,
-                "department": new_user.department,
-                "role": new_user.role,
+        try:
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            return {
+                "status": "created",
+                "user": {
+                    "id": new_user.id,
+                    "name": new_user.name,
+                    "email": new_user.email,
+                    "department": new_user.department,
+                    "role": new_user.role,
+                }
             }
-        }
+        except IntegrityError:
+            # Another concurrent request already inserted this user!
+            db.rollback()
+            existing = db.query(OneDeskUser).filter(OneDeskUser.email == req.email).first()
+            if existing:
+                return {
+                    "status": "updated",
+                    "user": {
+                        "id": existing.id,
+                        "name": existing.name,
+                        "email": existing.email,
+                        "department": existing.department,
+                        "role": existing.role,
+                    }
+                }
+            return {"status": "ok", "user": {"email": req.email}}
 
 
 @router.get("/users")
