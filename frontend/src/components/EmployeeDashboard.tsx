@@ -210,8 +210,12 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
       style={{
         flex: 1,
         width: "100%",
+        minWidth: 0,
+        maxWidth: "100%",
+        boxSizing: "border-box",
         overflowY: "auto",
-        padding: "28px 32px",
+        overflowX: "hidden",
+        padding: "24px 28px",
         backgroundColor: "#F8FAFC",
       }}
     >
@@ -224,6 +228,8 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
           marginBottom: "24px",
           flexWrap: "wrap",
           gap: "16px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         <div>
@@ -310,9 +316,11 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
           gap: "16px",
           marginBottom: "22px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         {stats.map((s, i) => {
@@ -321,6 +329,8 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
             <div
               key={i}
               style={{
+                minWidth: 0,
+                boxSizing: "border-box",
                 background: "#FFFFFF",
                 border: "1px solid #E2E8F0",
                 borderRadius: "16px",
@@ -377,14 +387,19 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.1fr 1fr",
+          gridTemplateColumns: "minmax(0, 1.25fr) minmax(0, 1fr)",
           gap: "16px",
           marginBottom: "22px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         {/* Real Live Recent Activity */}
         <div
           style={{
+            minWidth: 0,
+            width: "100%",
+            boxSizing: "border-box",
             background: "#FFFFFF",
             border: "1px solid #E2E8F0",
             borderRadius: "16px",
@@ -518,6 +533,9 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                       border: "1px solid #E2E8F0",
                       cursor: "pointer",
                       transition: "all 0.12s",
+                      minWidth: 0,
+                      width: "100%",
+                      boxSizing: "border-box",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = "#EFF6FC";
@@ -538,6 +556,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                         color: dc.color,
                         border: `1px solid ${dc.border}`,
                         whiteSpace: "nowrap",
+                        flexShrink: 0,
                       }}
                     >
                       {a.domain}
@@ -546,6 +565,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                     <span
                       style={{
                         flex: 1,
+                        minWidth: 0,
                         fontSize: "12.5px",
                         fontWeight: 500,
                         color: "#0F172A",
@@ -567,12 +587,13 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                         background: isResolved ? "#F0FDF4" : isOpen ? "#FFFBEB" : "#F1F5F9",
                         color: isResolved ? "#16A34A" : isOpen ? "#D97706" : "#64748B",
                         border: `1px solid ${isResolved ? "#BBF7D0" : isOpen ? "#FDE68A" : "#E2E8F0"}`,
+                        flexShrink: 0,
                       }}
                     >
                       {a.status}
                     </span>
 
-                    <span style={{ fontSize: "11px", color: "#94A3B8", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: "11px", color: "#94A3B8", whiteSpace: "nowrap", flexShrink: 0 }}>
                       {a.time}
                     </span>
                   </div>
@@ -584,6 +605,9 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
         {/* Interactive RAG Capabilities */}
         <div
           style={{
+            minWidth: 0,
+            width: "100%",
+            boxSizing: "border-box",
             background: "#FFFFFF",
             border: "1px solid #E2E8F0",
             borderRadius: "16px",
@@ -618,8 +642,10 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               gap: "10px",
+              width: "100%",
+              boxSizing: "border-box",
             }}
           >
             {ragCapabilities.map((r, i) => {
@@ -630,6 +656,8 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                   key={i}
                   onClick={() => onNavigate?.("chats", r.prompt)}
                   style={{
+                    minWidth: 0,
+                    boxSizing: "border-box",
                     padding: "12px",
                     background: isHov ? r.bg : "#F8FAFC",
                     borderRadius: "10px",
@@ -660,13 +688,18 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
           gap: "16px",
+          width: "100%",
+          boxSizing: "border-box",
         }}
       >
         {/* Real Live Trending Questions (Clickable) */}
         <div
           style={{
+            minWidth: 0,
+            width: "100%",
+            boxSizing: "border-box",
             background: "#FFFFFF",
             border: "1px solid #E2E8F0",
             borderRadius: "16px",
@@ -698,7 +731,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: 0 }}>
             {loading && (
               <div style={{ padding: "20px", textAlign: "center", color: "#94A3B8", fontSize: "12px" }}>
                 Loading trending topics...
@@ -723,6 +756,9 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                       border: "1px solid #E2E8F0",
                       cursor: "pointer",
                       transition: "all 0.12s",
+                      minWidth: 0,
+                      width: "100%",
+                      boxSizing: "border-box",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = "#EFF6FC";
@@ -754,6 +790,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                     <span
                       style={{
                         flex: 1,
+                        minWidth: 0,
                         fontSize: "12.5px",
                         fontWeight: 500,
                         color: "#0F172A",
@@ -774,12 +811,13 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                         backgroundColor: dc.bg,
                         color: dc.color,
                         border: `1px solid ${dc.border}`,
+                        flexShrink: 0,
                       }}
                     >
                       {item.domain}
                     </span>
 
-                    <ArrowRight style={{ width: 13, height: 13, color: "#94A3B8" }} />
+                    <ArrowRight style={{ width: 13, height: 13, color: "#94A3B8", flexShrink: 0 }} />
                   </div>
                 );
               })}
@@ -789,6 +827,9 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
         {/* Knowledge Domains with Live Interaction Counts */}
         <div
           style={{
+            minWidth: 0,
+            width: "100%",
+            boxSizing: "border-box",
             background: "#FFFFFF",
             border: "1px solid #E2E8F0",
             borderRadius: "16px",
@@ -820,7 +861,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px", minWidth: 0 }}>
             {domains.map((d, i) => {
               const Icon = d.icon;
               const isHov = hoveredDomain === i;
@@ -840,6 +881,9 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                     border: `1px solid ${isHov ? d.color + "55" : "#E2E8F0"}`,
                     cursor: "pointer",
                     transition: "all 0.15s",
+                    minWidth: 0,
+                    width: "100%",
+                    boxSizing: "border-box",
                   }}
                   onMouseEnter={() => setHoveredDomain(i)}
                   onMouseLeave={() => setHoveredDomain(null)}
@@ -860,7 +904,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                     <Icon style={{ width: "18px", height: "18px", color: d.color }} />
                   </div>
 
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A" }}>
                         {d.label}
@@ -874,12 +918,13 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                           background: "#FFFFFF",
                           border: "1px solid #E2E8F0",
                           color: "#64748B",
+                          flexShrink: 0,
                         }}
                       >
                         {count} records
                       </span>
                     </div>
-                    <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px" }}>
+                    <div style={{ fontSize: "11px", color: "#64748B", marginTop: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {d.desc}
                     </div>
                   </div>
@@ -891,6 +936,7 @@ export const EmployeeDashboard: React.FC<DashboardProps> = ({
                       color: isHov ? d.color : "#CBD5E1",
                       transition: "all 0.15s",
                       transform: isHov ? "translateX(2px)" : "translateX(0)",
+                      flexShrink: 0,
                     }}
                   />
                 </div>
