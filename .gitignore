@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+frontend/.next/
+frontend/out/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Vector Store & Cache
+backend/chroma_store/
+.DS_Store
+*.pyc
+*.pyo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

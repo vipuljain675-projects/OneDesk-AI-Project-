@@ -1,0 +1,459 @@
+// src/components/ActionCard.tsx
+"use client";
+
+import React, { useState } from "react";
+import {
+  CheckCircle2,
+  XCircle,
+  Calendar,
+  Ticket,
+  Building2,
+  AlertTriangle,
+  Loader2,
+  Shield,
+  Receipt,
+  UserCheck,
+  Users,
+} from "lucide-react";
+import { confirmAction } from "@/lib/api";
+
+interface ActionCardProps {
+  proposal: {
+    action_type: string;
+    display_name: string;
+    description: string;
+    details: Record<string, any>;
+    executed?: boolean;       // persisted flag — card already done
+    result_message?: string;  // persisted success message
+    ticket_number?: string;   // persisted ticket number
+  };
+  employeeId?: string;
+  threadId?: string;
+  messageId?: string;
+  onActionConfirmed?: (result: any) => void;
+}
+
+const ACTION_META: Record<string, { color: string; bg: string; border: string; icon: React.ReactNode }> = {
+  apply_leave: {
+    color: "#16A34A",
+    bg: "#F0FDF4",
+    border: "#BBF7D0",
+    icon: <Calendar style={{ width: 16, height: 16, color: "#16A34A" }} />,
+  },
+  raise_ticket: {
+    color: "#0078D4",
+    bg: "#EFF6FC",
+    border: "#C7E0F4",
+    icon: <Ticket style={{ width: 16, height: 16, color: "#0078D4" }} />,
+  },
+  book_room: {
+    color: "#9333EA",
+    bg: "#FAF5FF",
+    border: "#E9D5FF",
+    icon: <Building2 style={{ width: 16, height: 16, color: "#9333EA" }} />,
+  },
+  submit_expense: {
+    color: "#059669",
+    bg: "#ECFDF5",
+    border: "#A7F3D0",
+    icon: <Receipt style={{ width: 16, height: 16, color: "#059669" }} />,
+  },
+  request_visitor_pass: {
+    color: "#EA580C",
+    bg: "#FFF7ED",
+    border: "#FED7AA",
+    icon: <UserCheck style={{ width: 16, height: 16, color: "#EA580C" }} />,
+  },
+  submit_referral: {
+    color: "#7C3AED",
+    bg: "#F5F3FF",
+    border: "#DDD6FE",
+    icon: <Users style={{ width: 16, height: 16, color: "#7C3AED" }} />,
+  },
+};
+
+
+const formatKey = (key: string) =>
+  key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+export const ActionCard: React.FC<ActionCardProps> = ({
+  proposal,
+  employeeId,
+  threadId,
+  messageId,
+  onActionConfirmed,
+}) => {
+  // If already executed (loaded from DB), start in confirmed state
+  const [status, setStatus] = useState<"pending" | "loading" | "confirmed" | "cancelled">(
+    proposal.executed ? "confirmed" : "pending"
+  );
+  const [resultMessage, setResultMessage] = useState<string>(proposal.result_message || "");
+  const [ticketNumber, setTicketNumber] = useState<string>(proposal.ticket_number || "");
+
+  // Sync state if proposal prop updates (e.g. on in-memory patch or re-render)
+  React.useEffect(() => {
+    if (proposal.executed) {
+      setStatus("confirmed");
+      if (proposal.result_message) setResultMessage(proposal.result_message);
+      if (proposal.ticket_number) setTicketNumber(proposal.ticket_number);
+    }
+  }, [proposal.executed, proposal.result_message, proposal.ticket_number]);
+
+  const meta = ACTION_META[proposal.action_type] ?? {
+    color: "#D97706",
+    bg: "#FFFBEB",
+    border: "#FDE68A",
+    icon: <AlertTriangle style={{ width: 16, height: 16, color: "#D97706" }} />,
+  };
+
+  const handleConfirm = async () => {
+    setStatus("loading");
+    try {
+      const res = await confirmAction(
+        proposal.action_type,
+        proposal.details,
+        employeeId,
+        threadId,
+        messageId
+      );
+      if (res.success) {
+        setStatus("confirmed");
+        setResultMessage(res.message);
+        const tNum = res.ticket_number || res.booking_id || res.claim_id || res.pass_number || res.referral_number || "";
+        if (tNum) setTicketNumber(tNum);
+        if (onActionConfirmed) onActionConfirmed(res);
+
+      } else {
+        setStatus("pending");
+        alert("Action failed to execute");
+      }
+    } catch (e: any) {
+      console.error(e);
+      setStatus("pending");
+      alert("Error confirming action: " + e.message);
+    }
+  };
+
+  const handleCancel = () => setStatus("cancelled");
+
+  /* ── Cancelled State ─────────────────────────────────────────── */
+  if (status === "cancelled") {
+    return (
+      <div
+        style={{
+          marginTop: "14px",
+          padding: "10px 14px",
+          backgroundColor: "#F8FAFC",
+          border: "1px solid #E2E8F0",
+          borderRadius: "10px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          fontSize: "12px",
+          color: "#64748B",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <XCircle style={{ width: 14, height: 14, color: "#94A3B8" }} />
+          Action &quot;{proposal.display_name}&quot; was cancelled.
+        </span>
+        <button
+          onClick={() => setStatus("pending")}
+          style={{
+            background: "none",
+            border: "none",
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "#0078D4",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
+
+  /* ── Confirmed State ─────────────────────────────────────────── */
+  if (status === "confirmed") {
+    return (
+      <div
+        style={{
+          marginTop: "14px",
+          padding: "14px 16px",
+          backgroundColor: "#F0FDF4",
+          border: "1px solid #86EFAC",
+          borderRadius: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <CheckCircle2 style={{ width: 18, height: 18, color: "#16A34A", flexShrink: 0 }} />
+            <span style={{ fontWeight: 700, fontSize: "13px", color: "#15803D" }}>
+              {proposal.display_name} — Executed Successfully
+            </span>
+          </div>
+          {ticketNumber && (
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: "11px",
+                fontWeight: 700,
+                backgroundColor: "#DCFCE7",
+                color: "#15803D",
+                padding: "3px 10px",
+                borderRadius: "6px",
+                border: "1px solid #86EFAC",
+              }}
+            >
+              {ticketNumber}
+            </span>
+          )}
+        </div>
+        <p
+          style={{
+            margin: "8px 0 0 26px",
+            fontSize: "12px",
+            color: "#166534",
+            lineHeight: 1.5,
+          }}
+        >
+          {resultMessage || "Saved to database. Visible in My Requests and IT Helpdesk."}
+        </p>
+      </div>
+    );
+  }
+
+  /* ── Pending / Loading State ─────────────────────────────────── */
+  const detailEntries = Object.entries(proposal.details).filter(([, v]) => v != null && v !== "");
+
+  return (
+    <div
+      style={{
+        marginTop: "14px",
+        backgroundColor: "#FFFFFF",
+        border: `1.5px solid ${meta.border}`,
+        borderRadius: "14px",
+        overflow: "hidden",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
+      }}
+    >
+      {/* Card Header */}
+      <div
+        style={{
+          backgroundColor: meta.bg,
+          borderBottom: `1px solid ${meta.border}`,
+          padding: "12px 16px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: "10px",
+              backgroundColor: "#FFFFFF",
+              border: `1px solid ${meta.border}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {meta.icon}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontWeight: 700, fontSize: "13px", color: "#0F172A" }}>
+                {proposal.display_name}
+              </span>
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: meta.color,
+                  backgroundColor: "#FFFFFF",
+                  padding: "2px 8px",
+                  borderRadius: "4px",
+                  border: `1px solid ${meta.border}`,
+                }}
+              >
+                Action Proposal
+              </span>
+            </div>
+            <div style={{ fontSize: "11.5px", color: "#64748B", marginTop: "2px" }}>
+              {proposal.description}
+            </div>
+          </div>
+        </div>
+
+        {/* Requires Confirmation badge */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            fontSize: "11px",
+            fontWeight: 600,
+            color: "#92400E",
+            backgroundColor: "#FFFBEB",
+            padding: "4px 10px",
+            borderRadius: "8px",
+            border: "1px solid #FDE68A",
+            flexShrink: 0,
+            marginLeft: 12,
+          }}
+        >
+          <Shield style={{ width: 12, height: 12 }} />
+          Requires Confirmation
+        </div>
+      </div>
+
+      {/* Details Table */}
+      {detailEntries.length > 0 && (
+        <div style={{ padding: "12px 16px" }}>
+          <div
+            style={{
+              backgroundColor: "#F8FAFC",
+              border: "1px solid #E2E8F0",
+              borderRadius: "10px",
+              overflow: "hidden",
+            }}
+          >
+            {detailEntries.map(([key, val], idx) => (
+              <div
+                key={key}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "9px 14px",
+                  borderBottom: idx < detailEntries.length - 1 ? "1px solid #E2E8F0" : "none",
+                  fontSize: "12.5px",
+                }}
+              >
+                <span style={{ color: "#64748B", fontWeight: 500 }}>{formatKey(key)}:</span>
+                {key === "priority" ? (
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      padding: "2px 10px",
+                      borderRadius: "6px",
+                      backgroundColor:
+                        val === "high" ? "#FEF2F2" : val === "medium" ? "#FFFBEB" : "#F0FDF4",
+                      color: val === "high" ? "#DC2626" : val === "medium" ? "#D97706" : "#16A34A",
+                      border:
+                        val === "high"
+                          ? "1px solid #FECACA"
+                          : val === "medium"
+                          ? "1px solid #FDE68A"
+                          : "1px solid #BBF7D0",
+                    }}
+                  >
+                    {val}
+                  </span>
+                ) : (
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      color: "#1E293B",
+                      textAlign: "right",
+                      maxWidth: "60%",
+                    }}
+                  >
+                    {typeof val === "object" ? JSON.stringify(val) : String(val)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: "1px solid #F1F5F9",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: "8px",
+        }}
+      >
+        <button
+          onClick={handleCancel}
+          disabled={status === "loading"}
+          style={{
+            padding: "7px 16px",
+            fontSize: "12.5px",
+            fontWeight: 600,
+            color: "#64748B",
+            backgroundColor: "#F8FAFC",
+            border: "1px solid #E2E8F0",
+            borderRadius: "8px",
+            cursor: "pointer",
+            transition: "all 0.12s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "#F1F5F9";
+            e.currentTarget.style.color = "#1E293B";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "#F8FAFC";
+            e.currentTarget.style.color = "#64748B";
+          }}
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handleConfirm}
+          disabled={status === "loading"}
+          style={{
+            padding: "7px 18px",
+            fontSize: "12.5px",
+            fontWeight: 700,
+            color: "#FFFFFF",
+            backgroundColor: meta.color,
+            border: "none",
+            borderRadius: "8px",
+            cursor: status === "loading" ? "not-allowed" : "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "7px",
+            boxShadow: `0 2px 8px ${meta.color}44`,
+            opacity: status === "loading" ? 0.8 : 1,
+            transition: "all 0.12s ease",
+          }}
+          onMouseEnter={(e) => {
+            if (status !== "loading") e.currentTarget.style.opacity = "0.9";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = "1";
+          }}
+        >
+          {status === "loading" ? (
+            <>
+              <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} />
+              <span>Executing…</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 style={{ width: 14, height: 14 }} />
+              <span>Confirm &amp; Execute</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
