@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { sendQuery, QueryResponse } from "@/lib/api";
 import { ActionCard } from "./ActionCard";
+import { OneDeskBrandMark } from "./OneDeskLogo";
 
 export interface Message {
   id: string;
@@ -323,22 +324,7 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
               }}
             >
               <div style={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-                <div
-                  style={{
-                    width: "48px",
-                    height: "48px",
-                    borderRadius: "14px",
-                    background: "linear-gradient(135deg, #0078D4 0%, #00A4EF 100%)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#FFFFFF",
-                    boxShadow: "0 4px 12px rgba(0, 120, 212, 0.3)",
-                    flexShrink: 0,
-                  }}
-                >
-                  <Sparkles style={{ width: "24px", height: "24px" }} />
-                </div>
+                <OneDeskBrandMark size={48} />
                 <div>
                   <h2
                     style={{

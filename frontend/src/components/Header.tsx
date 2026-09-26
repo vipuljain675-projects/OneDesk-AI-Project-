@@ -4,6 +4,7 @@
 import React from "react";
 import { Shield, User, LogOut } from "lucide-react";
 import { UserSession } from "@/components/LoginView";
+import { OneDeskLogo } from "@/components/OneDeskLogo";
 
 interface HeaderProps {
   userSession: UserSession;
@@ -29,33 +30,9 @@ export const Header: React.FC<HeaderProps> = ({ userSession, onSignOut }) => {
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
-      {/* Left: Brand */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        {/* Microsoft 4-color logo */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px", width: "16px", height: "16px" }}>
-          <div style={{ backgroundColor: "#F25022", borderRadius: "1px" }}></div>
-          <div style={{ backgroundColor: "#7FBA00", borderRadius: "1px" }}></div>
-          <div style={{ backgroundColor: "#00A4EF", borderRadius: "1px" }}></div>
-          <div style={{ backgroundColor: "#FFB900", borderRadius: "1px" }}></div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <span style={{ fontWeight: 700, color: "#0F172A", fontSize: "15px", letterSpacing: "-0.2px" }}>
-            OneDesk
-          </span>
-          <span
-            style={{
-              fontSize: "11px",
-              color: "#0078D4",
-              fontWeight: 600,
-              backgroundColor: "#EFF6FC",
-              padding: "2px 8px",
-              borderRadius: "4px",
-              border: "1px solid #C7E0F4",
-            }}
-          >
-            Professional Suite
-          </span>
-        </div>
+      {/* Left: Brand — Crisp SVG Vector Logo Mark */}
+      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        <OneDeskLogo size={28} textSize={15} badgeSize={10} />
       </div>
 
       {/* Center: Active Role Badge (Strict Role Separation - Dynamic per Department) */}

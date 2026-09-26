@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Sparkles,
 } from "lucide-react";
+import { OneDeskBrandMark } from "./OneDeskLogo";
 import { EmployeeDashboard } from "./EmployeeDashboard";
 import { ThreadedChatView } from "./ThreadedChatView";
 import { MyRequestsView } from "./MyRequestsView";
@@ -330,19 +331,7 @@ export const EmployeeLayout: React.FC<EmployeeLayoutProps> = ({ userSession, onT
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div
-              style={{
-                width: "30px",
-                height: "30px",
-                borderRadius: "8px",
-                background: "linear-gradient(135deg, #0078D4, #00A4EF)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Sparkles style={{ width: "16px", height: "16px", color: "#fff" }} />
-            </div>
+            <OneDeskBrandMark size={32} />
             <div>
               <div style={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", lineHeight: 1 }}>
                 OneDesk AI
