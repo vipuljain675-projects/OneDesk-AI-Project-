@@ -355,3 +355,32 @@ def evaluation_health_check():
         "metrics_cache_size": len(performance_tracker.metrics_cache),
         "feedback_store_size": len(feedback_analyzer.feedback_store)
     }
+
+
+# ── Live Latency & Token Cost Telemetry ───────────────────────────────────────
+
+@router.get("/telemetry")
+def get_live_telemetry():
+    """
+    GET /api/telemetry
+
+    Returns real-time latency and token/cost stats for every Groq API call
+    made since the server started.
+
+    This is how we track and handle API latency and token costs
+    when the agent calls local functions (domain classifier → retrieval → LLM).
+
+    Response shape:
+    {
+        "total_calls": 12,
+        "answer_gen_calls": 6,
+        "action_detect_calls": 6,
+        "total_tokens_used": 8432,
+        "total_cost_usd": 0.0009,
+        "avg_latency_ms": 743.2,
+        "max_latency_ms": 1241.5,
+        "recent_calls": [ {...}, ... ]
+    }
+    """
+    from generation.answer_generator import get_telemetry_summary
+    return get_telemetry_summary()

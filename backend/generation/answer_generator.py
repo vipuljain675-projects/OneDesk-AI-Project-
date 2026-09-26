@@ -1,8 +1,10 @@
 """
 answer_generator.py
-Calls Groq API (Llama 3.3 70B) to generate answers.
+Calls Groq API to generate answers.
+Now includes per-call latency tracking and token usage logging.
 """
 import json
+import time
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -11,27 +13,112 @@ from config import GROQ_API_KEY, GROQ_MODEL
 
 client = Groq(api_key=GROQ_API_KEY)
 
+# ── In-memory telemetry store (resets on server restart) ─────────────────────
+# For a production system this would write to a DB/monitoring table.
+_telemetry: list[dict] = []
 
-def generate_answer(prompt: str) -> str:
+# Groq Llama pricing (approximate, per 1M tokens as of 2024)
+# https://console.groq.com/settings/billing
+_COST_PER_1M_INPUT_TOKENS  = 0.05   # USD ~$0.05 per 1M input tokens
+_COST_PER_1M_OUTPUT_TOKENS = 0.08   # USD ~$0.08 per 1M output tokens
+
+
+def _log_call(call_type: str, latency_ms: float, usage):
     """
-    Send a prompt to Groq and return the answer text.
-    Used for: RAG answer generation.
+    Record telemetry for one Groq API call.
+
+    Args:
+        call_type: 'answer_generation' | 'action_detection'
+        latency_ms: wall-clock time in milliseconds
+        usage: Groq CompletionUsage object (prompt_tokens, completion_tokens, total_tokens)
     """
+    prompt_tokens     = getattr(usage, "prompt_tokens", 0)
+    completion_tokens = getattr(usage, "completion_tokens", 0)
+    total_tokens      = getattr(usage, "total_tokens", 0)
+
+    # Estimated cost in USD
+    cost_usd = (
+        (prompt_tokens     / 1_000_000) * _COST_PER_1M_INPUT_TOKENS +
+        (completion_tokens / 1_000_000) * _COST_PER_1M_OUTPUT_TOKENS
+    )
+
+    entry = {
+        "call_type":          call_type,
+        "model":              GROQ_MODEL,
+        "latency_ms":         round(latency_ms, 2),
+        "prompt_tokens":      prompt_tokens,
+        "completion_tokens":  completion_tokens,
+        "total_tokens":       total_tokens,
+        "estimated_cost_usd": round(cost_usd, 6),
+    }
+    _telemetry.append(entry)
+
+    # Print to server console so it shows in Uvicorn logs
+    print(
+        f"[Telemetry] {call_type} | "
+        f"latency={latency_ms:.0f}ms | "
+        f"tokens={total_tokens} (in={prompt_tokens}, out={completion_tokens}) | "
+        f"cost≈${cost_usd:.5f}"
+    )
+    return entry
+
+
+def get_telemetry_summary() -> dict:
+    """
+    Return aggregate stats across all calls since server start.
+    Exposed via GET /api/telemetry endpoint.
+    """
+    if not _telemetry:
+        return {"total_calls": 0}
+
+    total_calls       = len(_telemetry)
+    total_tokens      = sum(e["total_tokens"]      for e in _telemetry)
+    total_cost_usd    = sum(e["estimated_cost_usd"] for e in _telemetry)
+    avg_latency_ms    = sum(e["latency_ms"]         for e in _telemetry) / total_calls
+    max_latency_ms    = max(e["latency_ms"]         for e in _telemetry)
+    answer_calls      = [e for e in _telemetry if e["call_type"] == "answer_generation"]
+    action_calls      = [e for e in _telemetry if e["call_type"] == "action_detection"]
+
+    return {
+        "total_calls":          total_calls,
+        "answer_gen_calls":     len(answer_calls),
+        "action_detect_calls":  len(action_calls),
+        "total_tokens_used":    total_tokens,
+        "total_cost_usd":       round(total_cost_usd, 4),
+        "avg_latency_ms":       round(avg_latency_ms, 1),
+        "max_latency_ms":       round(max_latency_ms, 1),
+        "recent_calls":         _telemetry[-5:],   # last 5 calls
+    }
+
+
+def generate_answer(prompt: str) -> dict:
+    """
+    Send a prompt to Groq and return the answer text + telemetry.
+    Now returns a dict: { "answer": str, "telemetry": dict }
+    """
+    t0 = time.time()
     response = client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.2,      # low temp = factual, grounded answers
         max_tokens=1024,
     )
-    return response.choices[0].message.content.strip()
+    latency_ms = (time.time() - t0) * 1000
+
+    answer = response.choices[0].message.content.strip()
+    telemetry = _log_call("answer_generation", latency_ms, response.usage)
+
+    return {"answer": answer, "telemetry": telemetry}
 
 
 def detect_action_intent(prompt: str) -> dict:
     """
     Send action detection prompt to Groq.
     Returns parsed JSON dict with intent_type and details.
+    Latency and tokens are also tracked internally.
     """
     try:
+        t0 = time.time()
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
@@ -39,6 +126,9 @@ def detect_action_intent(prompt: str) -> dict:
             max_tokens=1024,
             response_format={"type": "json_object"}
         )
+        latency_ms = (time.time() - t0) * 1000
+        _log_call("action_detection", latency_ms, response.usage)
+
         raw = response.choices[0].message.content.strip()
         try:
             return json.loads(raw)

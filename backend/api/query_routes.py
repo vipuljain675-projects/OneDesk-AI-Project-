@@ -15,11 +15,12 @@ from db.models import get_db, ConversationLog, ChatMessage, ChatThread
 from retrieval.domain_classifier import classify_domain
 from retrieval.semantic_retriever import retrieve_chunks
 from augmentation.prompt_builder import build_prompt, build_action_detection_prompt
-from generation.answer_generator import generate_answer, detect_action_intent
+from generation.answer_generator import generate_answer, detect_action_intent, get_telemetry_summary
 from actions.tools import get_tool_by_name
 from config import DOMAINS
 
 import uuid
+import time
 
 router = APIRouter()
 
@@ -143,6 +144,7 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
             }
 
     # ── Step 5: Generate contextual RAG answer ────────────────────────────────
+    t_request_start = time.time()
     prompt = build_prompt(
         query=query,
         chunks=chunks,
@@ -151,7 +153,10 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
         user_name=request.user_name,
         department=request.department,
     )
-    answer = generate_answer(prompt)
+    gen_result = generate_answer(prompt)
+    answer = gen_result["answer"]
+    gen_telemetry = gen_result["telemetry"]
+    total_request_ms = round((time.time() - t_request_start) * 1000, 1)
 
     # ── Step 6: Format sources for frontend ──────────────────────────────────
     sources = [
@@ -173,6 +178,7 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
         bot_response=answer,
         source_cited=sources[0]["filename"] if sources else None
     )
+    print(f"[Request] total_pipeline_ms={total_request_ms} | tokens={gen_telemetry.get('total_tokens')} | cost≈${gen_telemetry.get('estimated_cost_usd')}")
     db.add(log)
 
     # ── Step 8: Persist messages to ChatThread for GPT-style UI ──────────────
