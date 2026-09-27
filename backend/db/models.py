@@ -7,8 +7,19 @@ from config import DATABASE_URL
 
 # ── Supabase PostgreSQL — only database, no SQLite fallback ──────────────────
 print(f"[DB] Connecting to Supabase PostgreSQL...")
+db_url = DATABASE_URL
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    # If psycopg2 is available, explicitly use it; otherwise fallback to psycopg
+    try:
+        import psycopg2
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+    except ImportError:
+        pass
+
 engine = create_engine(
-    DATABASE_URL,
+    db_url,
     pool_pre_ping=True,        # auto-reconnect on dropped connections
     pool_size=5,
     max_overflow=10,
