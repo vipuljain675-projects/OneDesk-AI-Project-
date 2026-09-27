@@ -19,13 +19,21 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# ── CORS — allow Next.js frontend (all origins for hackathon dev) ──────────────
+# ── CORS — allow Next.js frontend ─────────────────────────────────────────────
+ALLOWED_ORIGINS = [
+    "https://one-desk-ai-project.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "*",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_origins=["*"],          # wildcard for hackathon; tighten post-launch
+    allow_credentials=False,      # must be False when allow_origins=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # ── Register routes ───────────────────────────────────────────────────────────
