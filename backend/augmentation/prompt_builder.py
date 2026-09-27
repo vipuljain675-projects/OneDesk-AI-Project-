@@ -100,38 +100,27 @@ def build_action_detection_prompt(query: str, domain: str, history: list[dict] =
 Determine if the employee is asking general information/questions OR requesting an automated action/workflow.
 {recent_context}
 RULES:
-1. "query": ONLY when employee is asking questions, troubleshooting, seeking policy details, or informational inquiry without asking to take time off, file, or book (e.g. "How many leaves do I get?", "What is the bereavement policy?", "My screen is flickering", "What is the meal expense limit?").
-2. "raise_ticket": When employee asks to raise, submit, file, or create an IT ticket/incident (e.g. "Raise an IT ticket for this", "File a complaint about my laptop", "Please create a ticket").
-3. "apply_leave": When employee wants to take time off, apply for leave, or draft/send a leave application (e.g. "I need 2 days casual leave", "Apply sick leave for tomorrow", "Submit leave from Oct 1 to Oct 3", "Write a leave application and mail to manager@company.com").
-   Always extract:
-   - "leave_type": "casual" | "sick" | "earned" | "vacation" (default to "casual")
-   - "start_date": requested start date or relative date
-   - "end_date": requested end date or relative date
-   - "reason": reason for leave
-   - "manager_email": exact email address if mentioned in query, else "manager@company.com"
-   - "email_subject": formal corporate email subject
-   - "formal_body": professional formal email body for the manager with greeting, dates, reason, handover note, and formal sign-off. NEVER output brackets or placeholders like "[Your Name]" or "[Name]". Sign off as "Vipul Jain".
-4. "book_room": When employee asks to book, reserve, or schedule a room/desk (e.g. "Book conference room B for 3 PM", "Reserve room 101 for tomorrow").
-5. "submit_expense": When employee asks to file, submit, claim, or log an expense reimbursement (e.g. "I spent ₹4,200 on client dinner yesterday, file a reimbursement", "Reimburse $120 for flight travel"). Auto-extract amount, category (Meals & Entertainment / Travel & Transport / Software & Tools / Office & Supplies), expense_date, and description.
-6. "request_visitor_pass": When employee asks to issue, generate, request, or create a campus visitor pass or guest badge (e.g. "My client Rahul Sharma is visiting campus tomorrow at 2 PM, generate a visitor badge", "Issue guest pass for Priya Patel"). Auto-extract visitor_name, visitor_email, visit_date, time_slot, purpose.
-7. "submit_referral": When employee asks to refer a candidate for a job or role (e.g. "Refer Priya Verma for Full Stack Developer role", "Submit candidate referral for Aman Gupta"). Auto-extract candidate_name, candidate_email, role, notes.
-
-Respond in valid JSON only:
-{{
-  "intent_type": "query" | "raise_ticket" | "apply_leave" | "book_room" | "submit_expense" | "request_visitor_pass" | "submit_referral",
-  "details": {{
-    // For raise_ticket: "issue_description", "priority" (low/medium/high)
-    // For apply_leave: "leave_type", "start_date", "end_date", "reason", "manager_email", "email_subject", "formal_body"
-    // For book_room: "room_preference", "booking_date", "time_slot", "purpose"
-    // For submit_expense: "amount", "category", "expense_date", "description"
-    // For request_visitor_pass: "visitor_name", "visitor_email", "visit_date", "time_slot", "purpose"
-    // For submit_referral: "candidate_name", "candidate_email", "role", "notes"
-    // For query: {{}}
-  }}
-}}
+1. "query": Employee is asking questions, troubleshooting, seeking policy details, or informational inquiry without asking to file, take time off, email manager, or book.
+2. "raise_ticket": Employee asks to raise, submit, file, or create an IT ticket or incident. Extract: "issue_description", "priority" (low/medium/high).
+3. "apply_leave": Employee asks to take time off, apply for leave, request remote work approval from manager, or send/draft an approval email to their manager (e.g. "Send email to harrybajwa@gmail.com", "Apply for 2 days leave", "Request remote work approval from Harry").
+   Extract:
+   - "leave_type": e.g. "Remote Work Request", "Casual Leave", "Sick Leave"
+   - "start_date": requested start date or duration
+   - "end_date": requested end date
+   - "reason": reason for request
+   - "manager_email": recipient email if mentioned (e.g. "harrybajwa@gmail.com"), otherwise "manager@company.com"
+   - "email_subject": formal corporate email subject line
+   - "formal_body": complete formal professional email text to the manager with greeting, details, deliverables handover, and sign-off as Vipul Jain.
+4. "book_room": Employee asks to book, reserve, or schedule a room/desk. Extract: "room_preference", "booking_date", "time_slot", "purpose".
+5. "submit_expense": Employee asks to file, submit, claim, or log an expense reimbursement. Extract: "amount", "category" (Meals & Entertainment / Travel & Transport / Software & Tools / Office & Supplies), "expense_date", "description".
+6. "request_visitor_pass": Employee asks to issue or request a campus visitor pass. Extract: "visitor_name", "visitor_email", "visit_date", "time_slot", "purpose".
+7. "submit_referral": Employee asks to refer a candidate for a role. Extract: "candidate_name", "candidate_email", "role", "notes".
 
 Employee message: "{query}"
 
-JSON:"""
+Return a valid JSON object with keys "intent_type" and "details".
+Example format:
+{{"intent_type": "apply_leave", "details": {{"leave_type": "Remote Work Request", "manager_email": "harrybajwa@gmail.com", "email_subject": "Remote Work Request", "formal_body": "Dear Harry, ..."}}}}
+"""
     return prompt
 

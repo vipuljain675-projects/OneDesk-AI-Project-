@@ -121,15 +121,22 @@ def detect_action_intent(prompt: str) -> dict:
         t0 = time.time()
         response = client.chat.completions.create(
             model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are an enterprise action intent classifier. You always output valid RFC 8259 JSON."},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.0,      # deterministic for intent detection
-            max_tokens=1024,
+            max_tokens=800,
             response_format={"type": "json_object"}
         )
         latency_ms = (time.time() - t0) * 1000
         _log_call("action_detection", latency_ms, response.usage)
 
         raw = response.choices[0].message.content.strip()
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
         try:
             return json.loads(raw)
         except json.JSONDecodeError as je:
@@ -137,4 +144,20 @@ def detect_action_intent(prompt: str) -> dict:
             return {"intent_type": "query", "details": {}}
     except Exception as e:
         print(f"⚠️ [detect_action_intent] Groq API Exception: {e}")
+        # Secondary fallback without response_format if Groq validator had an issue
+        try:
+            fb_resp = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": prompt + "\nOutput valid JSON object only."}],
+                temperature=0.0,
+                max_tokens=600,
+            )
+            fb_raw = fb_resp.choices[0].message.content.strip()
+            import re
+            m = re.search(r"\{.*\}", fb_raw, re.DOTALL)
+            if m:
+                return json.loads(m.group(0))
+        except Exception as fb_err:
+            print(f"⚠️ [detect_action_intent] Fallback also failed: {fb_err}")
         return {"intent_type": "query", "details": {}}
+
