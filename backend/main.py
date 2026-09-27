@@ -39,8 +39,18 @@ app.include_router(user_router, prefix="/api", tags=["Users"])
 
 @app.on_event("startup")
 async def startup():
-    """Initialize DB tables on startup."""
+    """Initialize DB tables and vector store on startup."""
     init_db()
+    try:
+        from db.vector_client import get_or_create_collection
+        from ingestion.embed_and_store import embed_and_store
+        col = get_or_create_collection("handbook")
+        if col.count() == 0:
+            print("📦 [ChromaDB] No handbook vectors found. Running initial ingestion...")
+            embed_and_store()
+            print("✅ [ChromaDB] Initial handbook ingestion complete.")
+    except Exception as e:
+        print(f"⚠️ [Startup] Vector store notice: {e}")
     print("✅ OneDeskAI backend started. DB tables initialized.")
 
 
