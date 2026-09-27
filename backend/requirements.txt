@@ -1,11 +1,8 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
 fastapi
 uvicorn[standard]
 python-dotenv
 groq
 chromadb
-sentence-transformers
 sqlalchemy
 psycopg2-binary
 psycopg[binary]
