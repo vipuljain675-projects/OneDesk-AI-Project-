@@ -8,6 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from retrieval.embedder import get_embedder
+from db.vector_client import get_or_create_collection
 
 _domain_desc_embeddings = None
 
