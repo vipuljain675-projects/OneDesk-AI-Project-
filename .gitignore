@@ -13,7 +13,8 @@ backend/.env
 frontend/.env.local
 
 # Vector Store & Cache
-backend/chroma_store/
+# backend/chroma_store/ is committed so cloud deployment does not run OOM embedding on startup
+/chroma_store/
 .DS_Store
 *.pyc
 *.pyo

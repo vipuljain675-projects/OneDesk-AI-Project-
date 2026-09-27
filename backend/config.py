@@ -19,8 +19,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
-# ChromaDB
-CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_store")
+# ChromaDB — always resolve relative paths to backend/ directory
+_raw_chroma_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_store")
+CHROMA_PERSIST_DIR = (
+    str((Path(__file__).resolve().parent / _raw_chroma_dir).resolve())
+    if not os.path.isabs(_raw_chroma_dir)
+    else _raw_chroma_dir
+)
 
 # Domains
 DOMAINS = ["IT", "HR", "Finance", "Facilities"]

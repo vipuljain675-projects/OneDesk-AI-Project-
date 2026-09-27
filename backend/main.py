@@ -51,12 +51,9 @@ async def startup():
     init_db()
     try:
         from db.vector_client import get_or_create_collection
-        from ingestion.embed_and_store import embed_and_store
         col = get_or_create_collection("handbook")
-        if col.count() == 0:
-            print("📦 [ChromaDB] No handbook vectors found. Running initial ingestion...")
-            embed_and_store()
-            print("✅ [ChromaDB] Initial handbook ingestion complete.")
+        count = col.count()
+        print(f"📦 [ChromaDB] Handbook collection ready ({count} chunks available).")
     except Exception as e:
         print(f"⚠️ [Startup] Vector store notice: {e}")
     print("✅ OneDeskAI backend started. DB tables initialized.")
