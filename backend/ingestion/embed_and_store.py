@@ -9,6 +9,9 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from retrieval.embedder import get_embedder
 from db.vector_client import get_or_create_collection
+from ingestion.load_handbook import load_markdown_files
+from ingestion.chunk import chunk_documents
+from config import DOMAIN_DESCRIPTIONS
 
 _domain_desc_embeddings = None
 
