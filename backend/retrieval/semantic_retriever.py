@@ -6,10 +6,8 @@ Implements domain filter + fallback to broader search if needed.
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from sentence_transformers import SentenceTransformer
+from retrieval.embedder import get_embedder
 from db.vector_client import get_or_create_collection
-
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def retrieve_chunks(query: str, domain: str, top_k: int = 5, domains_list: list = None) -> list[dict]:
@@ -22,7 +20,7 @@ def retrieve_chunks(query: str, domain: str, top_k: int = 5, domains_list: list 
     3. If < 2 results found, fallback to unfiltered search across all domains
     """
     collection = get_or_create_collection("handbook")
-    query_emb = embedder.encode(query, normalize_embeddings=True).tolist()
+    query_emb = get_embedder().encode(query, normalize_embeddings=True).tolist()
 
     chunks = []
 

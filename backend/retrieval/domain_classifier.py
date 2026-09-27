@@ -8,16 +8,20 @@ import re
 import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from sentence_transformers import SentenceTransformer
+from retrieval.embedder import get_embedder
 from config import DOMAINS, DOMAIN_DESCRIPTIONS, DOMAIN_KEYWORDS, HIGH_CONFIDENCE, MEDIUM_CONFIDENCE
 
-embedder = SentenceTransformer("all-MiniLM-L6-v2")
+_domain_embeddings = None
 
-# Pre-compute domain description embeddings
-_domain_embeddings = {
-    domain: embedder.encode(desc, normalize_embeddings=True)
-    for domain, desc in DOMAIN_DESCRIPTIONS.items()
-}
+def _get_domain_embeddings():
+    global _domain_embeddings
+    if _domain_embeddings is None:
+        emb = get_embedder()
+        _domain_embeddings = {
+            domain: emb.encode(desc, normalize_embeddings=True)
+            for domain, desc in DOMAIN_DESCRIPTIONS.items()
+        }
+    return _domain_embeddings
 
 
 def classify_domain(query: str) -> dict:
@@ -36,12 +40,13 @@ def classify_domain(query: str) -> dict:
     query_lower = query_clean.lower()
     query_tokens = set(re.findall(r'\b[a-zA-Z]+\b', query_lower))
 
-    query_emb = embedder.encode(query_clean, normalize_embeddings=True)
+    emb = get_embedder()
+    query_emb = emb.encode(query_clean, normalize_embeddings=True)
 
     raw_scores = {}
     keyword_matches = {}
 
-    for domain, desc_emb in _domain_embeddings.items():
+    for domain, desc_emb in _get_domain_embeddings().items():
         base_cosine = float(query_emb @ desc_emb)
         # Check domain keywords
         kws = DOMAIN_KEYWORDS.get(domain, [])
