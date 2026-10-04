@@ -13,10 +13,29 @@ from api.threads_routes import router as threads_router
 from api.user_routes import router as user_router
 from db.models import init_db
 
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize DB tables and vector store on startup."""
+    init_db()
+    try:
+        from db.vector_client import get_or_create_collection
+        col = get_or_create_collection("handbook")
+        count = col.count()
+        print(f"📦 [ChromaDB] Handbook collection ready ({count} chunks available).")
+    except Exception as e:
+        print(f"⚠️ [Startup] Vector store notice: {e}")
+    print("✅ OneDeskAI backend started on http://localhost:8000 🚀")
+    yield
+
+
 app = FastAPI(
     title="OneDeskAI Backend",
     description="Multi-domain campus assistant with RAG + agentic actions",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ── CORS — allow Next.js frontend ─────────────────────────────────────────────
@@ -45,20 +64,15 @@ app.include_router(threads_router, prefix="/api", tags=["Threads"])
 app.include_router(user_router, prefix="/api", tags=["Users"])
 
 
-@app.on_event("startup")
-async def startup():
-    """Initialize DB tables and vector store on startup."""
-    init_db()
-    try:
-        from db.vector_client import get_or_create_collection
-        col = get_or_create_collection("handbook")
-        count = col.count()
-        print(f"📦 [ChromaDB] Handbook collection ready ({count} chunks available).")
-    except Exception as e:
-        print(f"⚠️ [Startup] Vector store notice: {e}")
-    print("✅ OneDeskAI backend started. DB tables initialized.")
-
-
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "OneDeskAI backend is running 🚀"}
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    is_local = os.environ.get("PORT") is None
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=is_local)
+

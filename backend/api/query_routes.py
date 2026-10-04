@@ -45,6 +45,7 @@ class QueryResponse(BaseModel):
     action_proposal: dict | None  # populated if agent wants to take an action
     session_id: str
     message_id: int | None = None
+    user_message_id: int | None = None
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -182,19 +183,22 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
     db.add(log)
 
     # ── Step 8: Persist messages to ChatThread for GPT-style UI ──────────────
+    # ── Step 8: Persist messages to ChatThread for GPT-style UI ──────────────
     bot_message_id = None
+    user_message_id = None
     if request.thread_id:
         import json as _json
         from datetime import datetime as _dt
 
         # Save user message — with real user identity
-        db.add(ChatMessage(
+        user_msg = ChatMessage(
             thread_id=request.thread_id,
             sender="user",
             text=query,
             user_email=request.employee_id,   # employee_id is user's email
             user_name=request.user_name,
-        ))
+        )
+        db.add(user_msg)
         # Save bot response — no user identity (it's the bot)
         bot_msg = ChatMessage(
             thread_id=request.thread_id,
@@ -223,7 +227,9 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
                 thread.title = query[:60] + ("..." if len(query) > 60 else "")
 
         db.commit()
+        db.refresh(user_msg)
         db.refresh(bot_msg)
+        user_message_id = user_msg.id
         bot_message_id = bot_msg.id
     else:
         db.commit()
@@ -237,4 +243,5 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
         action_proposal=action_proposal,
         session_id=session_id,
         message_id=bot_message_id,
+        user_message_id=user_message_id,
     )

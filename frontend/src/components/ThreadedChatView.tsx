@@ -13,8 +13,24 @@ import {
   Building,
   Laptop,
   Plus,
+  Mic,
+  MicOff,
+  Pencil,
+  Trash2,
+  Copy,
+  Check,
+  X,
 } from "lucide-react";
-import { sendQuery, fetchMessages, createThread, QueryResponse, ChatMessage as ApiChatMessage, markMessageExecuted } from "@/lib/api";
+import {
+  sendQuery,
+  fetchMessages,
+  createThread,
+  QueryResponse,
+  ChatMessage as ApiChatMessage,
+  markMessageExecuted,
+  deleteChatMessage,
+  rewindThreadMessages,
+} from "@/lib/api";
 import { ActionCard } from "./ActionCard";
 import { UserSession } from "./LoginView";
 import { OneDeskBrandMark } from "./OneDeskLogo";
@@ -67,8 +83,55 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sessionIds, setSessionIds] = useState<Record<string, string>>({});
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
+  const [isListening, setIsListening] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const startVoice = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser. Please use Google Chrome, Microsoft Edge, or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      // Auto-send after voice input
+      setTimeout(() => {
+        handleSend(transcript);
+      }, 300);
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {
+      console.warn("Failed to start speech recognition:", e);
+      setIsListening(false);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -203,10 +266,16 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
         actionProposal: res.action_proposal,
       };
 
-      setThreadMessages((prev) => ({
-        ...prev,
-        [targetThreadId!]: [...(prev[targetThreadId!] || []), botMsg],
-      }));
+      setThreadMessages((prev) => {
+        const msgs = prev[targetThreadId!] || [];
+        const updatedMsgs = msgs.map((m) =>
+          m.id === userMsgId && res.user_message_id ? { ...m, id: String(res.user_message_id) } : m
+        );
+        return {
+          ...prev,
+          [targetThreadId!]: [...updatedMsgs, botMsg],
+        };
+      });
 
       // Refresh thread list so title updates
       onThreadsChanged?.();
@@ -216,6 +285,132 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
         ...prev,
         [targetThreadId!]: [
           ...(prev[targetThreadId!] || []),
+          {
+            id: `err_${Date.now()}`,
+            sender: "bot",
+            text: "Sorry, I ran into an error connecting to the backend server.",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ],
+      }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopyText = (msgId: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedMessageId(msgId);
+    setTimeout(() => setCopiedMessageId(null), 2000);
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    if (!activeThreadId) return;
+    const currentMsgs = threadMessages[activeThreadId] || [];
+    const index = currentMsgs.findIndex((m) => m.id === msgId);
+    if (index === -1) return;
+
+    const targetMsg = currentMsgs[index];
+    const toDeleteIds: string[] = [msgId];
+
+    // If user message is paired with an immediate bot response, delete both together
+    if (targetMsg.sender === "user" && currentMsgs[index + 1]?.sender === "bot") {
+      toDeleteIds.push(currentMsgs[index + 1].id);
+    }
+
+    setThreadMessages((prev) => ({
+      ...prev,
+      [activeThreadId]: (prev[activeThreadId] || []).filter((m) => !toDeleteIds.includes(m.id)),
+    }));
+
+    for (const id of toDeleteIds) {
+      deleteChatMessage(id).catch((err) => console.warn("Failed to delete message in DB:", err));
+    }
+  };
+
+  const handleEditSubmit = async (messageId: string) => {
+    const trimmed = editText.trim();
+    if (!trimmed || !activeThreadId || loading) return;
+
+    const currentMsgs = threadMessages[activeThreadId] || [];
+    const msgIndex = currentMsgs.findIndex((m) => m.id === messageId);
+    if (msgIndex === -1) return;
+
+    // History before this message (up to 6 messages)
+    const historyBefore = currentMsgs
+      .slice(0, msgIndex)
+      .slice(-6)
+      .map((m) => ({ sender: m.sender, text: m.text }));
+
+    const updatedUserMsg: Message = {
+      ...currentMsgs[msgIndex],
+      text: trimmed,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+
+    // GPT-style rewind: immediately truncate subsequent messages from UI state
+    const truncatedList = [...currentMsgs.slice(0, msgIndex), updatedUserMsg];
+    setThreadMessages((prev) => ({
+      ...prev,
+      [activeThreadId]: truncatedList,
+    }));
+
+    setEditingMessageId(null);
+    setEditText("");
+    setLoading(true);
+
+    // Call backend to prune messages in database from this point onwards
+    rewindThreadMessages(activeThreadId, messageId).catch((err) =>
+      console.warn("Rewind DB warning:", err)
+    );
+
+    try {
+      const sessionId = sessionIds[activeThreadId];
+      const res: QueryResponse = await sendQuery(
+        trimmed,
+        sessionId,
+        undefined,
+        historyBefore,
+        activeThreadId,
+        userSession?.name,
+        userSession?.department,
+        userSession?.email
+      );
+
+      if (res.session_id) {
+        setSessionIds((prev) => ({ ...prev, [activeThreadId]: res.session_id }));
+      }
+
+      const botMsg: Message = {
+        id: res.message_id ? String(res.message_id) : `b_${Date.now()}`,
+        sender: "bot",
+        text: res.answer,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        domain: res.domain,
+        confidence: res.confidence,
+        routingDecision: res.routing_decision,
+        sources: res.sources,
+        actionProposal: res.action_proposal,
+      };
+
+      setThreadMessages((prev) => {
+        const msgs = prev[activeThreadId] || [];
+        const updated = msgs.map((m, idx) =>
+          idx === msgIndex && res.user_message_id ? { ...m, id: String(res.user_message_id) } : m
+        );
+        return {
+          ...prev,
+          [activeThreadId]: [...updated, botMsg],
+        };
+      });
+
+      onThreadsChanged?.();
+    } catch (error) {
+      console.error("Error in query:", error);
+      setThreadMessages((prev) => ({
+        ...prev,
+        [activeThreadId]: [
+          ...(prev[activeThreadId] || []),
           {
             id: `err_${Date.now()}`,
             sender: "bot",
@@ -349,6 +544,8 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
             currentMessages.map((msg) => (
               <div
                 key={msg.id}
+                onMouseEnter={() => setHoveredMessageId(msg.id)}
+                onMouseLeave={() => setHoveredMessageId(null)}
                 style={{
                   display: "flex",
                   flexDirection: msg.sender === "user" ? "row-reverse" : "row",
@@ -477,9 +674,89 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
                     )}
 
                     {/* Message text */}
-                    <div style={{ fontSize: "13.5px", lineHeight: 1.6 }}>
-                      {msg.sender === "user" ? msg.text : renderFormattedText(msg.text)}
-                    </div>
+                    {msg.sender === "user" && editingMessageId === msg.id ? (
+                      <div style={{ width: "100%", marginTop: "2px" }}>
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleEditSubmit(msg.id);
+                            } else if (e.key === "Escape") {
+                              setEditingMessageId(null);
+                            }
+                          }}
+                          rows={3}
+                          autoFocus
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            borderRadius: "12px",
+                            border: "1.5px solid #C7E0F4",
+                            fontSize: "13.5px",
+                            lineHeight: "1.5",
+                            color: "#0F172A",
+                            background: "#FFFFFF",
+                            outline: "none",
+                            resize: "vertical",
+                            fontFamily: "inherit",
+                          }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
+                          <button
+                            type="button"
+                            onClick={() => setEditingMessageId(null)}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: "8px",
+                              border: "1px solid rgba(255,255,255,0.4)",
+                              background: "rgba(255,255,255,0.2)",
+                              color: "#FFFFFF",
+                              fontSize: "11.5px",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              transition: "all 0.15s",
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.3) ")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.2)")}
+                          >
+                            <X style={{ width: "12px", height: "12px" }} />
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEditSubmit(msg.id)}
+                            disabled={!editText.trim() || loading}
+                            style={{
+                              padding: "6px 14px",
+                              borderRadius: "8px",
+                              border: "none",
+                              background: "#FFFFFF",
+                              color: "#0078D4",
+                              fontSize: "11.5px",
+                              fontWeight: 700,
+                              cursor: editText.trim() && !loading ? "pointer" : "not-allowed",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                              transition: "all 0.15s",
+                            }}
+                          >
+                            <Send style={{ width: "12px", height: "12px" }} />
+                            Save & Resubmit
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: "13.5px", lineHeight: 1.6 }}>
+                        {msg.sender === "user" ? msg.text : renderFormattedText(msg.text)}
+                      </div>
+                    )}
 
                     {/* Action card */}
                     {msg.actionProposal && (
@@ -572,6 +849,222 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
                       </div>
                     )}
                   </div>
+
+                  {/* User Message Action Toolbar (Edit, Copy, Delete) */}
+                  {msg.sender === "user" && editingMessageId !== msg.id && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        marginTop: "4px",
+                        opacity: hoveredMessageId === msg.id ? 1 : 0,
+                        transition: "opacity 0.15s ease",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMessageId(msg.id);
+                          setEditText(msg.text);
+                        }}
+                        title="Edit prompt and rewind response"
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #E2E8F0",
+                          background: "#FFFFFF",
+                          color: "#64748B",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          transition: "all 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = "#0078D4";
+                          e.currentTarget.style.borderColor = "#0078D4";
+                          e.currentTarget.style.background = "#EFF6FC";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = "#64748B";
+                          e.currentTarget.style.borderColor = "#E2E8F0";
+                          e.currentTarget.style.background = "#FFFFFF";
+                        }}
+                      >
+                        <Pencil style={{ width: "11px", height: "11px" }} />
+                        Edit
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(msg.id, msg.text)}
+                        title="Copy text"
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #E2E8F0",
+                          background: "#FFFFFF",
+                          color: copiedMessageId === msg.id ? "#16A34A" : "#64748B",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          transition: "all 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (copiedMessageId !== msg.id) {
+                            e.currentTarget.style.color = "#0078D4";
+                            e.currentTarget.style.background = "#EFF6FC";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (copiedMessageId !== msg.id) {
+                            e.currentTarget.style.color = "#64748B";
+                            e.currentTarget.style.background = "#FFFFFF";
+                          }
+                        }}
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <>
+                            <Check style={{ width: "11px", height: "11px" }} />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy style={{ width: "11px", height: "11px" }} />
+                            Copy
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        title="Delete prompt and answer"
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #E2E8F0",
+                          background: "#FFFFFF",
+                          color: "#EF4444",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          transition: "all 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "#FEF2F2";
+                          e.currentTarget.style.borderColor = "#FCA5A5";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "#FFFFFF";
+                          e.currentTarget.style.borderColor = "#E2E8F0";
+                        }}
+                      >
+                        <Trash2 style={{ width: "11px", height: "11px" }} />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Bot Message Action Toolbar (Copy, Delete) */}
+                  {msg.sender === "bot" && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginTop: "6px",
+                        opacity: hoveredMessageId === msg.id ? 1 : 0.45,
+                        transition: "opacity 0.15s ease",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(msg.id, msg.text)}
+                        title="Copy answer"
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #E2E8F0",
+                          background: "#FFFFFF",
+                          color: copiedMessageId === msg.id ? "#16A34A" : "#64748B",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          transition: "all 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (copiedMessageId !== msg.id) {
+                            e.currentTarget.style.color = "#0078D4";
+                            e.currentTarget.style.background = "#EFF6FC";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (copiedMessageId !== msg.id) {
+                            e.currentTarget.style.color = "#64748B";
+                            e.currentTarget.style.background = "#FFFFFF";
+                          }
+                        }}
+                      >
+                        {copiedMessageId === msg.id ? (
+                          <>
+                            <Check style={{ width: "11px", height: "11px" }} />
+                            Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy style={{ width: "11px", height: "11px" }} />
+                            Copy
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMessage(msg.id)}
+                        title="Delete response"
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: "1px solid #E2E8F0",
+                          background: "#FFFFFF",
+                          color: "#94A3B8",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          transition: "all 0.12s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = "#EF4444";
+                          e.currentTarget.style.background = "#FEF2F2";
+                          e.currentTarget.style.borderColor = "#FCA5A5";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = "#94A3B8";
+                          e.currentTarget.style.background = "#FFFFFF";
+                          e.currentTarget.style.borderColor = "#E2E8F0";
+                        }}
+                      >
+                        <Trash2 style={{ width: "11px", height: "11px" }} />
+                        Delete
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -645,28 +1138,76 @@ export const ThreadedChatView: React.FC<ThreadedChatViewProps> = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder="Ask anything about IT, HR, Finance, or Facilities..."
+            placeholder={isListening ? "Listening... Speak your request now 🎙️" : "Ask anything about IT, HR, Finance, or Facilities..."}
             style={{
               flex: 1,
               padding: "14px 18px",
-              border: "1px solid #CBD5E1",
+              border: isListening ? "1.5px solid #EF4444" : "1px solid #CBD5E1",
               borderRadius: "14px",
               fontSize: "14px",
               outline: "none",
               transition: "border 0.2s, box-shadow 0.2s",
-              background: "#F8FAFC",
+              background: isListening ? "#FEF2F2" : "#F8FAFC",
             }}
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = "#0078D4";
-              e.currentTarget.style.boxShadow = "0 0 0 3px rgba(0,120,212,0.1)";
+              e.currentTarget.style.borderColor = isListening ? "#EF4444" : "#0078D4";
+              e.currentTarget.style.boxShadow = isListening ? "0 0 0 3px rgba(239, 68, 68, 0.2)" : "0 0 0 3px rgba(0,120,212,0.1)";
               e.currentTarget.style.background = "#FFFFFF";
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = "#CBD5E1";
+              e.currentTarget.style.borderColor = isListening ? "#EF4444" : "#CBD5E1";
               e.currentTarget.style.boxShadow = "none";
-              e.currentTarget.style.background = "#F8FAFC";
+              e.currentTarget.style.background = isListening ? "#FEF2F2" : "#F8FAFC";
             }}
           />
+
+          {/* Voice Mic Button */}
+          <button
+            type="button"
+            onClick={startVoice}
+            disabled={loading}
+            title={isListening ? "Listening... Click to stop" : "Voice command (Click to speak)"}
+            style={{
+              padding: isListening ? "13px 18px" : "14px",
+              borderRadius: "14px",
+              backgroundColor: isListening ? "#EF4444" : "#F1F5F9",
+              color: isListening ? "#FFFFFF" : "#64748B",
+              border: isListening ? "1.5px solid #DC2626" : "1.5px solid #CBD5E1",
+              cursor: loading ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              flexShrink: 0,
+              transition: "all 0.15s ease",
+              boxShadow: isListening ? "0 0 0 4px rgba(239, 68, 68, 0.25)" : "none",
+              animation: isListening ? "pulse 1.2s infinite" : "none",
+            }}
+            onMouseEnter={(e) => {
+              if (!isListening && !loading) {
+                e.currentTarget.style.backgroundColor = "#EFF6FC";
+                e.currentTarget.style.borderColor = "#0078D4";
+                e.currentTarget.style.color = "#0078D4";
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isListening && !loading) {
+                e.currentTarget.style.backgroundColor = "#F1F5F9";
+                e.currentTarget.style.borderColor = "#CBD5E1";
+                e.currentTarget.style.color = "#64748B";
+              }
+            }}
+          >
+            {isListening ? (
+              <>
+                <MicOff style={{ width: "16px", height: "16px" }} />
+                <span style={{ fontSize: "12px", fontWeight: 600 }}>Listening...</span>
+              </>
+            ) : (
+              <Mic style={{ width: "16px", height: "16px" }} />
+            )}
+          </button>
+
           <button
             onClick={() => handleSend()}
             disabled={!input.trim() || loading}

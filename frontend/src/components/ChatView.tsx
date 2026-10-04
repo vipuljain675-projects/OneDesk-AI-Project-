@@ -18,6 +18,8 @@ import {
   Layers,
   ShieldAlert,
   ArrowRight,
+  Mic,
+  MicOff,
 } from "lucide-react";
 import { sendQuery, QueryResponse } from "@/lib/api";
 import { ActionCard } from "./ActionCard";
@@ -62,8 +64,46 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
   const [sessionId, setSessionId] = useState<string>("");
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const startVoice = () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice input is not supported in this browser. Please use Chrome or Edge.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend   = () => setIsListening(false);
+    recognition.onerror = () => setIsListening(false);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      // Auto-send after voice input
+      setTimeout(() => {
+        handleSend(transcript);
+      }, 300);
+    };
+
+    recognition.start();
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -928,6 +968,35 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
               }}
             />
 
+            {/* 🎙️ Voice Input Button */}
+            <button
+              type="button"
+              onClick={startVoice}
+              disabled={loading}
+              title={isListening ? "Stop listening" : "Speak your query"}
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "10px",
+                backgroundColor: isListening ? "#EF4444" : "#F1F5F9",
+                color: isListening ? "#FFFFFF" : "#64748B",
+                border: isListening ? "none" : "1.5px solid #CBD5E1",
+                cursor: loading ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                transition: "all 0.15s ease",
+                boxShadow: isListening ? "0 0 0 4px rgba(239, 68, 68, 0.2)" : "none",
+                animation: isListening ? "pulse 1.2s infinite" : "none",
+              }}
+            >
+              {isListening
+                ? <MicOff style={{ width: "15px", height: "15px" }} />
+                : <Mic    style={{ width: "15px", height: "15px" }} />}
+            </button>
+
+            {/* Send Button */}
             <button
               type="submit"
               disabled={!input.trim() || loading}

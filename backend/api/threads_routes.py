@@ -234,3 +234,54 @@ def mark_message_executed(message_id: str, req: MarkExecutedRequest, db: Session
     db.commit()
     print(f"✅ [mark_message_executed] Persisted executed=True for message {msg.id}")
     return {"success": True, "message_id": msg.id}
+
+
+@router.delete("/messages/{message_id}")
+def delete_message(message_id: str, db: Session = Depends(get_db)):
+    """Delete a single chat message by ID."""
+    try:
+        int_id = int(message_id)
+        msg = db.query(ChatMessage).filter(ChatMessage.id == int_id).first()
+        if msg:
+            thread_id = msg.thread_id
+            db.delete(msg)
+            db.commit()
+            return {"success": True, "deleted_id": int_id, "thread_id": thread_id}
+    except (ValueError, TypeError):
+        pass
+    return {"success": True, "deleted_id": message_id}
+
+
+@router.delete("/threads/{thread_id}/messages-from/{message_id}")
+def rewind_messages_from(thread_id: str, message_id: str, db: Session = Depends(get_db)):
+    """
+    Truncate/rewind thread: delete target message and ALL subsequent messages in this thread.
+    Used for GPT-style edit prompt where history rewinds back to that turn.
+    """
+    try:
+        int_id = int(message_id)
+        target_msg = (
+            db.query(ChatMessage)
+            .filter(ChatMessage.id == int_id, ChatMessage.thread_id == thread_id)
+            .first()
+        )
+        if target_msg:
+            deleted_count = (
+                db.query(ChatMessage)
+                .filter(
+                    ChatMessage.thread_id == thread_id,
+                    ChatMessage.id >= target_msg.id
+                )
+                .delete(synchronize_session=False)
+            )
+            thread = db.query(ChatThread).filter(ChatThread.thread_id == thread_id).first()
+            if thread:
+                thread.updated_at = datetime.utcnow()
+            db.commit()
+            print(f"🔄 [rewind_messages_from] Deleted {deleted_count} messages from thread {thread_id} starting at message {int_id}")
+            return {"success": True, "deleted_count": deleted_count}
+    except Exception as e:
+        print(f"⚠️ [rewind_messages_from] Error: {e}")
+
+    return {"success": True, "deleted_count": 0}
+

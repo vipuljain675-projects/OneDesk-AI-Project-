@@ -20,6 +20,7 @@ export interface QueryResponse {
   } | null;
   session_id: string;
   message_id?: number;
+  user_message_id?: number;
 }
 
 export interface Ticket {
@@ -215,6 +216,16 @@ export async function fetchMessages(threadId: string): Promise<ChatMessage[]> {
   const res = await fetch(`${API_BASE}/api/threads/${threadId}/messages`, { cache: "no-store" });
   if (!res.ok) throw new Error("Failed to fetch messages");
   return res.json();
+}
+
+export async function deleteChatMessage(messageId: string | number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/messages/${messageId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete message");
+}
+
+export async function rewindThreadMessages(threadId: string, messageId: string | number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/threads/${threadId}/messages-from/${messageId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to rewind thread messages");
 }
 
 // ── Other ──────────────────────────────────────────────────────────────────────
