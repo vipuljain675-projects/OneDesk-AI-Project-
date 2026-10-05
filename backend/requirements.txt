@@ -10,3 +10,4 @@ alembic
 pydantic
 httpx
 resend
+PyJWT

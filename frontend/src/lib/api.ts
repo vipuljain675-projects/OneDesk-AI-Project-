@@ -1,5 +1,31 @@
 // src/lib/api.ts
+import { supabase } from "./supabaseClient";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * getAuthHeaders() — Supabase JWT token pakadta hai aur Authorization header banata hai.
+ *
+ * Kaise kaam karta hai:
+ * 1. supabase.auth.getSession() → current login session nikalta hai
+ * 2. Session mein access_token hoti hai (Supabase ka JWT)
+ * 3. Woh token "Bearer eyJhbGci..." format mein header mein daalta hai
+ * 4. Backend (auth/middleware.py) yeh header pakadta hai aur verify karta hai
+ *
+ * Agar user logged in nahi hai → sirf Content-Type header return karta hai (no crash)
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
+  } catch {
+    // Session nahi mili — admin console ya dev mode, continue without auth
+  }
+  return headers;
+}
 
 export interface QueryResponse {
   answer: string;
@@ -151,9 +177,10 @@ export async function sendQuery(
   department?: string,
   employeeId?: string
 ): Promise<QueryResponse> {
+  const headers = await getAuthHeaders(); // ← JWT token automatically attach hoga
   const res = await fetch(`${API_BASE}/api/query`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       query,
       session_id: sessionId || undefined,
@@ -162,7 +189,7 @@ export async function sendQuery(
       history: history || undefined,
       user_name: userName || "Employee",
       department: department || "General",
-      employee_id: employeeId || "EMP001",
+      employee_id: employeeId || "EMP001", // Backend token se override kar dega agar JWT valid hai
     }),
   });
   if (!res.ok) throw new Error(`Query failed: ${res.statusText}`);
@@ -172,7 +199,11 @@ export async function sendQuery(
 // ── Thread CRUD ────────────────────────────────────────────────────────────────
 
 export async function fetchThreads(employeeId = "EMP001"): Promise<ChatThread[]> {
-  const res = await fetch(`${API_BASE}/api/threads?employee_id=${employeeId}`, { cache: "no-store" });
+  const headers = await getAuthHeaders(); // ← JWT se backend khud sahi user identify karega
+  const res = await fetch(`${API_BASE}/api/threads?employee_id=${employeeId}`, {
+    cache: "no-store",
+    headers,
+  });
   if (!res.ok) throw new Error("Failed to fetch threads");
   return res.json();
 }

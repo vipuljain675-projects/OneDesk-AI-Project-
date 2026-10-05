@@ -8,6 +8,7 @@ import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from fastapi import APIRouter, Depends
+from auth.middleware import optional_auth
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -49,10 +50,20 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=QueryResponse)
-async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
+async def handle_query(
+    request: QueryRequest,
+    db: Session = Depends(get_db),
+    current_user: dict | None = Depends(optional_auth),  # JWT auth (optional — admin console bhi support karta hai)
+):
     session_id = request.session_id or str(uuid.uuid4())
     query = request.query.strip()
     query_lower = query.lower()
+
+    # ── JWT Auth: Agar token valid hai toh verified email use karo ──────────
+    # current_user = { "email": "vipul@gmail.com", "user_id": "uuid", "role": "..." }
+    # Agar admin console (no token) → request.employee_id as-is use hoga
+    if current_user and current_user.get("email"):
+        request.employee_id = current_user["email"]  # Token se verified email
 
     # ── Step 0: Retrieve past conversation context for this session ──────────
     past_logs = db.query(ConversationLog).filter(

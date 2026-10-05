@@ -14,6 +14,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import uuid
 import json
 from fastapi import APIRouter, Depends, HTTPException
+from auth.middleware import optional_auth
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -61,8 +62,15 @@ class MessageOut(BaseModel):
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/threads", response_model=list[ThreadOut])
-def list_threads(employee_id: str = "EMP001", db: Session = Depends(get_db)):
+def list_threads(
+    employee_id: str = "EMP001",
+    db: Session = Depends(get_db),
+    current_user: dict | None = Depends(optional_auth),
+):
     """List all threads for an employee, ordered by most recently updated."""
+    # JWT se verified email use karo, warna query param as-is
+    if current_user and current_user.get("email"):
+        employee_id = current_user["email"]
     threads = (
         db.query(ChatThread)
         .filter(ChatThread.employee_id == employee_id)
