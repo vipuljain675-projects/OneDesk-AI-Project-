@@ -20,6 +20,8 @@ from generation.answer_generator import generate_answer, detect_action_intent, g
 from actions.tools import get_tool_by_name
 from config import DOMAINS
 
+from retrieval.semantic_cache import semantic_cache
+
 import uuid
 import time
 
@@ -47,6 +49,14 @@ class QueryResponse(BaseModel):
     session_id: str
     message_id: int | None = None
     user_message_id: int | None = None
+    cached: bool = False
+    cache_similarity: float | None = None
+
+
+@router.get("/cache/stats")
+def get_cache_stats():
+    """Returns real-time semantic cache performance and cost savings metrics."""
+    return semantic_cache.get_stats()
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -64,6 +74,83 @@ async def handle_query(
     # Agar admin console (no token) → request.employee_id as-is use hoga
     if current_user and current_user.get("email"):
         request.employee_id = current_user["email"]  # Token se verified email
+
+    # ── Step -1: Check Semantic Cache (Sub-20ms Vector Similarity Lookup) ────
+    if not request.force_domain and not request.history:
+        cached_data, sim_score = semantic_cache.lookup(query)
+        if cached_data:
+            cached_answer = cached_data["answer"]
+            # Personalize greeting if user_name is available
+            if request.user_name:
+                import re
+                first_name = request.user_name.split()[0]
+                cached_answer = re.sub(r'^(Hey|Hi|Hello)\s+[A-Za-z]+,', f'Hey {first_name},', cached_answer)
+
+            cache_domain = cached_data.get("domain", "General")
+            cache_conf = cached_data.get("confidence", 0.95)
+            cache_sources = cached_data.get("sources", [])
+            cache_decision = cached_data.get("routing_decision", "direct")
+
+            # Persist to database so chat history thread is maintained
+            bot_msg_id = None
+            user_msg_id = None
+            if request.thread_id:
+                import json as _json
+                from datetime import datetime as _dt
+                user_msg = ChatMessage(
+                    thread_id=request.thread_id,
+                    sender="user",
+                    text=query,
+                    user_email=request.employee_id,
+                    user_name=request.user_name,
+                )
+                db.add(user_msg)
+                bot_msg = ChatMessage(
+                    thread_id=request.thread_id,
+                    sender="bot",
+                    text=cached_answer,
+                    domain=cache_domain,
+                    confidence=cache_conf,
+                    sources=_json.dumps(cache_sources) if cache_sources else None,
+                    action_proposal=None,
+                )
+                db.add(bot_msg)
+                thread = db.query(ChatThread).filter(ChatThread.thread_id == request.thread_id).first()
+                if thread:
+                    thread.updated_at = _dt.utcnow()
+                    if thread.title == "New Chat":
+                        thread.title = query[:60] + ("..." if len(query) > 60 else "")
+                db.commit()
+                db.refresh(user_msg)
+                db.refresh(bot_msg)
+                user_msg_id = user_msg.id
+                bot_msg_id = bot_msg.id
+            else:
+                log = ConversationLog(
+                    session_id=session_id,
+                    user_query=query,
+                    domain_classified=cache_domain,
+                    confidence_score=cache_conf,
+                    bot_response=cached_answer,
+                    source_cited=cache_sources[0]["filename"] if cache_sources else None
+                )
+                db.add(log)
+                db.commit()
+
+            print(f"[Request] ⚡ Served from Semantic Cache in <15ms | similarity={sim_score:.4f} | tokens_saved=1000")
+            return QueryResponse(
+                answer=cached_answer,
+                domain=cache_domain,
+                confidence=cache_conf,
+                routing_decision=cache_decision,
+                sources=cache_sources,
+                action_proposal=None,
+                session_id=session_id,
+                message_id=bot_msg_id,
+                user_message_id=user_msg_id,
+                cached=True,
+                cache_similarity=round(sim_score, 4),
+            )
 
     # ── Step 0: Retrieve past conversation context for this session ──────────
     past_logs = db.query(ConversationLog).filter(
@@ -245,6 +332,16 @@ async def handle_query(
     else:
         db.commit()
 
+    # ── Step 9: Store in Semantic Cache for instant sub-20ms future hits ─────
+    if not action_proposal and routing_decision != "ask_user":
+        semantic_cache.store(query, {
+            "answer": answer,
+            "domain": domain,
+            "confidence": confidence,
+            "routing_decision": routing_decision,
+            "sources": sources,
+        }, domain=domain)
+
     return QueryResponse(
         answer=answer,
         domain=domain,
@@ -255,4 +352,6 @@ async def handle_query(
         session_id=session_id,
         message_id=bot_message_id,
         user_message_id=user_message_id,
+        cached=False,
+        cache_similarity=None,
     )

@@ -40,6 +40,8 @@ export interface Message {
     domain: string;
   }>;
   actionProposal?: any;
+  cached?: boolean;
+  cacheSimilarity?: number;
 }
 
 interface ChatViewProps {
@@ -176,6 +178,8 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
         routingDecision: res.routing_decision,
         sources: res.sources,
         actionProposal: res.action_proposal,
+        cached: res.cached,
+        cacheSimilarity: res.cache_similarity,
       };
 
       setMessages((prev) => [...prev, botMsg]);
@@ -600,6 +604,27 @@ export const ChatView: React.FC<ChatViewProps> = ({ onTicketCreated }) => {
                         >
                           <Cpu style={{ width: "12px", height: "12px" }} />
                           {Math.round(msg.confidence * 100)}% Confidence
+                        </span>
+                      )}
+
+                      {/* ⚡ Semantic Cache Hit Badge */}
+                      {msg.cached && (
+                        <span
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "3px 9px",
+                            borderRadius: "20px",
+                            backgroundColor: "#ECFDF5",
+                            color: "#059669",
+                            border: "1px solid #6EE7B7",
+                            boxShadow: "0 1px 2px rgba(16, 185, 129, 0.1)",
+                          }}
+                        >
+                          ⚡ Cache Hit {msg.cacheSimilarity ? `(${Math.round(msg.cacheSimilarity * 100)}% Match)` : ""}
                         </span>
                       )}
 

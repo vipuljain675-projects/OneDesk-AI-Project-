@@ -47,6 +47,8 @@ export interface QueryResponse {
   session_id: string;
   message_id?: number;
   user_message_id?: number;
+  cached?: boolean;
+  cache_similarity?: number;
 }
 
 export interface Ticket {
