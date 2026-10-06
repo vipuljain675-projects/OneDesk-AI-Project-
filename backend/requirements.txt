@@ -11,3 +11,4 @@ pydantic
 httpx
 resend
 PyJWT
+redis

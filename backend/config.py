@@ -17,7 +17,8 @@ if not DATABASE_URL:
 # Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+# Redis Cloud
+REDIS_URL = os.getenv("REDIS_URL", "")
 
 # ChromaDB — always resolve relative paths to backend/ directory
 _raw_chroma_dir = os.getenv("CHROMA_PERSIST_DIR", "./chroma_store")
