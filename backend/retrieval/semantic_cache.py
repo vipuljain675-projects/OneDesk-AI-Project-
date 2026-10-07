@@ -87,15 +87,18 @@ class SemanticCache:
                     if sim > best_score:
                         best_score = sim
                         best_matched_query = item.get("query", "")
+                        best_matched_key = key
                         best_data = json.loads(item.get("response_data", "{}"))
 
                 if best_score >= target_threshold and best_data:
                     self.stats["hits"] += 1
                     self.stats["tokens_saved"] += 1000
                     self.stats["cost_saved_usd"] = round(self.stats["cost_saved_usd"] + 0.00015, 6)
-                    # Increment Redis global hits counter
+                    # Increment Redis global hits counter & per-key hits counter
                     try:
                         self.redis_client.incr("onedesk:cache:stats:hits")
+                        if best_matched_key:
+                            self.redis_client.hincrby(f"onedesk:cache:{best_matched_key}", "hits", 1)
                     except Exception:
                         pass
                     print(f"[SemanticCache-REDIS] ⚡ CACHE HIT! '{query}' matched '{best_matched_query}' (Score: {best_score:.4f})")
