@@ -76,7 +76,7 @@ async def handle_query(
         request.employee_id = current_user["email"]  # Token se verified email
 
     # ── Step -1: Check Semantic Cache (Sub-20ms Vector Similarity Lookup) ────
-    if not request.force_domain and not request.history:
+    if not request.force_domain:
         cached_data, sim_score = semantic_cache.lookup(query)
         if cached_data:
             cached_answer = cached_data["answer"]
